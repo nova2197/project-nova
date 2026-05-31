@@ -509,9 +509,11 @@ export class ControlRoomScene extends Phaser.Scene {
   _buildKeypad() {
     const { W, H, pad } = this;
     const top = this.lockPanelY + 22 + this.locks.length * 48 + 14;
-    const fireH = 50;
-    const gridH = H - top - fireH - pad - 8;
-    const bh = Math.min(46, (gridH - 4 * 6) / 5);
+    const fireH = 46;
+    const hintH = 34;
+    const gridH = H - top - fireH - hintH - pad - 10;
+    // On short screens (landscape mobile) shrink buttons so everything fits
+    const bh = Math.max(28, Math.min(46, (gridH - 4 * 5) / 5));
     const bw = (W - pad * 2 - 12) / 3;
     this.keypadTop = top; this.keypadBtnH = bh;
     this.keypadBtns = [];
@@ -636,7 +638,7 @@ export class ControlRoomScene extends Phaser.Scene {
   // ── Fire button ─────────────────────────────────────────────────────
   _buildFireButton() {
     const { W, H, pad } = this;
-    const h = 50, y = H - h - pad;
+    const h = Math.min(50, H * 0.08), y = H - h - 4;
     this._fireBtnY = y; this._fireBtnH = h;
     this.fireBtn = this.add.graphics().setDepth(5);
     this.fireLabel = this.add.text(W / 2, y + h / 2, 'FIRE SIGNAL', {
@@ -1040,9 +1042,17 @@ export class ControlRoomScene extends Phaser.Scene {
   // ── Hint overlay (the method) ───────────────────────────────────────
   _buildHintOverlay() {
     const { W, H, pad } = this;
-    // small chip button — sits in the gap between ENTER CODE and FIRE
-    const cw = 150, ch = 28, cx = W / 2 - cw / 2;
-    const cy = Math.min(this._hintChipY || (this.lockPanelY - 34), this._fireBtnY - 42);
+    // HINT chip — always sits exactly between ENTER CODE row and FIRE button
+    const ch = 28;
+    const cw = Math.min(160, W * 0.5);
+    const cx = W / 2 - cw / 2;
+    // midpoint between bottom of ENTER CODE and top of FIRE
+    const enterCodeBottom = (this._hintChipY || 0);
+    const fireTop = this._fireBtnY;
+    const gap = fireTop - enterCodeBottom;
+    const cy = gap >= ch + 8
+      ? enterCodeBottom + (gap - ch) / 2   // centre in gap
+      : fireTop - ch - 4;                   // squeeze above FIRE if gap is tiny
     btn(this, cx, cy, cw, ch, 'HINT: METHOD (-10 XP)', 10, 5, () => this._showHint(), 0xffaa00);
 
     this.hintDim = this.add.graphics().setDepth(45).setVisible(false);

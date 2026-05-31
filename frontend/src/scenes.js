@@ -444,24 +444,24 @@ export class BriefingScene extends Phaser.Scene {
       fontSize: '10px', fontFamily: 'Courier New', color: '#00aaff', letterSpacing: 2,
     }).setDepth(4);
 
+    // Short lines so nothing wraps mid-sentence on any screen
     const dialogue = [
       "Water secured. Power online. Food growing.",
       " ",
-      "But we are blind. No contact with other survivors for 6 months.",
+      "No contact with survivors for 6 months.",
       " ",
-      "We found parts to build a signal tower.",
+      "We built a signal tower.",
+      "To reach them — calculate the exact angle.",
       " ",
-      "To reach them — calculate the exact angle, path, and bearing.",
+      "Get it wrong and the signal dies.",
       " ",
-      "Get it wrong and the signal dies. Our crew stays isolated.",
-      " ",
-      "Your knowledge is our only hope. Are you ready?"
+      "Your knowledge is our only hope.",
     ].join('\n');
 
-    const fs = Math.min(13, W * 0.019);
+    const fs = Math.min(12, W * 0.018, H * 0.016);
     const displayText = this.add.text(dialogX + 10, mainY + 28, '', {
       fontSize: `${fs}px`, fontFamily: 'Courier New', color: '#aaccdd',
-      wordWrap: { width: dialogW - 20 }, lineSpacing: 4,
+      lineSpacing: Math.min(6, H * 0.006),
     }).setDepth(4);
 
     let i = 0;

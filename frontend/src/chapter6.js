@@ -32,13 +32,29 @@ function tone(freq, dur, type = 'sine', vol = 0.22) {
   } catch (_) {}
 }
 const sfx = {
-  key:     () => tone(420 + Math.random() * 60, 0.04, 'square', 0.08),  // soft typewriter key
+  key:     () => tone(420 + Math.random() * 60, 0.04, 'square', 0.08),
   click:   () => tone(660, 0.05, 'square', 0.1),
-  lock:    () => { tone(523, 0.08); setTimeout(() => tone(784, 0.16), 80); },
-  wrong:   () => { tone(180, 0.16, 'sawtooth', 0.16); setTimeout(() => tone(140, 0.2, 'sawtooth', 0.12), 160); },
+  lock:    () => { tone(523, 0.08); setTimeout(() => tone(784, 0.22), 80); setTimeout(() => tone(1046, 0.18), 180); },
+  wrong:   () => { tone(180, 0.16, 'sawtooth', 0.18); setTimeout(() => tone(140, 0.22, 'sawtooth', 0.14), 160); },
   hint:    () => tone(440, 0.08, 'triangle', 0.12),
-  charge:  () => tone(120, 0.5, 'sawtooth', 0.12),
-  fire:    () => [0,70,140,210,300,400].forEach((d,i) => setTimeout(() => tone(700 + i*180, 0.14, 'sine', 0.16), d)),
+  charge:  () => {
+    // Rising build-up — pitch sweeps up over 1.2s
+    [0,120,240,360,480,600,720,900,1100].forEach((d, i) =>
+      setTimeout(() => tone(80 + i * 60, 0.18, 'sawtooth', 0.1 + i * 0.01), d));
+  },
+  fire: () => {
+    // Deep thud + high energy burst
+    tone(60, 0.3, 'sawtooth', 0.3);
+    setTimeout(() => tone(120, 0.25, 'sawtooth', 0.2), 80);
+    [0,60,120,200,300,420,560].forEach((d, i) =>
+      setTimeout(() => tone(800 + i * 220, 0.18, 'sine', 0.18), d));
+  },
+  impact: () => {
+    tone(55, 0.4, 'sawtooth', 0.35);
+    setTimeout(() => tone(110, 0.3, 'sawtooth', 0.25), 100);
+    setTimeout(() => tone(880, 0.2, 'sine', 0.2), 200);
+    setTimeout(() => tone(1320, 0.15, 'sine', 0.15), 350);
+  },
 };
 
 // ─── Drawing helpers ──────────────────────────────────────────────────
@@ -49,15 +65,31 @@ function dot(scene) {
     g.generateTexture('p_dot', 8, 8); g.destroy();
   }
 }
-function burst(scene, x, y, color = 0x00ff88, count = 26) {
+function burst(scene, x, y, color = 0x00ff88, count = 26, depth = 72) {
   dot(scene);
   const e = scene.add.particles(x, y, 'p_dot', {
-    speed: { min: 60, max: 220 }, angle: { min: 0, max: 360 },
-    scale: { start: 0.9, end: 0 }, lifespan: { min: 350, max: 700 },
-    quantity: count, tint: color, emitting: false,
-  }).setDepth(60);
+    speed: { min: 80, max: 280 }, angle: { min: 0, max: 360 },
+    scale: { start: 1.1, end: 0 }, lifespan: { min: 400, max: 900 },
+    quantity: count, tint: color, emitting: false, blendMode: 'ADD',
+  }).setDepth(depth);
   e.explode(count);
-  scene.time.delayedCall(800, () => e.destroy());
+  scene.time.delayedCall(1000, () => e.destroy());
+}
+function shockwave(scene, x, y, color = 0x00ff88, depth = 72) {
+  // Three expanding rings with decreasing opacity
+  for (let i = 0; i < 3; i++) {
+    scene.time.delayedCall(i * 100, () => {
+      const ring = scene.add.graphics().setDepth(depth);
+      let r = 4;
+      const t = scene.time.addEvent({ delay: 14, repeat: 30, callback: () => {
+        r += 7; ring.clear();
+        const a = Math.max(0, 0.9 - r / 200);
+        ring.lineStyle(3 - i * 0.8, color, a);
+        ring.strokeCircle(x, y, r);
+      }});
+      scene.time.delayedCall(500, () => { scene.time.removeEvent(t); ring.destroy(); });
+    });
+  }
 }
 function hexGrid(scene, W, H, depth = 0) {
   const g = scene.add.graphics().setDepth(depth);
@@ -569,7 +601,14 @@ export class ControlRoomScene extends Phaser.Scene {
       lock.done = true;
       sfx.lock();
       const row = this.lockRows[this.activeLock];
-      burst(this, row.rx + row.rw - 20, row.ry + row.rowH / 2, 0x00ff88, 14);
+      // Green sweep flash across the row
+      const sweep = this.add.graphics().setDepth(20);
+      sweep.fillStyle(0x00ff88, 0.18);
+      sweep.fillRoundedRect(row.rx, row.ry, row.rw, row.rowH, 4);
+      this.tweens.add({ targets: sweep, alpha: 0, duration: 600,
+        onComplete: () => sweep.destroy() });
+      burst(this, row.rx + row.rw / 2, row.ry + row.rowH / 2, 0x00ff88, 18);
+      burst(this, row.rx + row.rw / 2, row.ry + row.rowH / 2, 0xffffff, 8);
       // advance to next unsolved lock
       const next = this.locks.findIndex(l => !l.done);
       this.activeLock = next === -1 ? this.activeLock : next;
@@ -626,115 +665,280 @@ export class ControlRoomScene extends Phaser.Scene {
     }
   }
 
-  // ── FIRE sequence (code-drawn beam) ─────────────────────────────────
+  // ── FIRE sequence ────────────────────────────────────────────────────
   _fire() {
     this.firing = true;
     this._updateFireBtn();
     const { W, H } = this;
-
-    // ── Switch to tower background scene ──────────────────────────────
-    // Fade out the control room UI, reveal the tower bg beneath
-    const cover = this.add.graphics().setDepth(60);
-    cover.fillStyle(0x000000, 0); cover.fillRect(0, 0, W, H);
-    this.tweens.add({ targets: cover, alpha: 0, duration: 0 }); // ensure visible
-
-    // Draw the tower scene backdrop (same as ClimbScene)
-    const fireScene = this.add.graphics().setDepth(60);
     const assets = this.registry.get('ch6Assets') || {};
-    if (assets.bg) {
-      const bg = this.add.image(W / 2, H / 2, 'ch6_bg').setDepth(60);
-      bg.setScale(Math.max(W / bg.width, H / bg.height));
-    } else {
-      // code-drawn fallback: dark sky + ground + tower silhouette
-      fireScene.fillGradientStyle(0x000510, 0x000510, 0x0a1a0a, 0x0a1a0a, 1);
-      fireScene.fillRect(0, 0, W, H);
-      fireScene.fillStyle(0x111a11, 1); fireScene.fillRect(0, H * 0.75, W, H * 0.25);
-      // tower body
-      const tx = W * 0.5, ty = H * 0.75;
-      fireScene.fillStyle(0x1a2a1a, 1);
-      fireScene.fillRect(tx - 18, ty - H * 0.38, 36, H * 0.38);
-      fireScene.fillRect(tx - 30, ty - H * 0.12, 60, H * 0.12);
-      // antenna tip
-      fireScene.fillStyle(0x2a3a2a, 1);
-      fireScene.fillRect(tx - 4, ty - H * 0.44, 8, H * 0.06);
+
+    // ── PHASE 0 — Fade UI out, draw fire scene ────────────────────────
+    const uiObjs = this.children.list.filter(o => o.depth < 60 && o.alpha > 0);
+    uiObjs.forEach(o => this.tweens.add({ targets: o, alpha: 0, duration: 500 }));
+
+    // Always use code-drawn scene so tower tip coords are exact
+    const sky = this.add.graphics().setDepth(60).setAlpha(0);
+    sky.fillGradientStyle(0x000008, 0x000008, 0x00050f, 0x00050f, 1);
+    sky.fillRect(0, 0, W, H);
+    // Stars
+    for (let i = 0; i < 80; i++) {
+      const bri = Math.random() * 0.7 + 0.1;
+      sky.fillStyle(0xffffff, bri);
+      sky.fillRect(Math.random() * W, Math.random() * H * 0.82, bri > 0.5 ? 2 : 1, bri > 0.5 ? 2 : 1);
     }
+    // Horizon glow
+    sky.fillGradientStyle(0x001a08, 0x001a08, 0x000008, 0x000008, 0.7);
+    sky.fillRect(0, H * 0.75, W, H * 0.08);
+    // Ground
+    sky.fillStyle(0x040e04, 1); sky.fillRect(0, H * 0.83, W, H * 0.17);
+    this.tweens.add({ targets: sky, alpha: 1, duration: 600 });
 
-    // Fade UI out, tower scene in
-    const uiObjs = this.children.list.filter(o => o.depth < 60);
-    uiObjs.forEach(o => { this.tweens.add({ targets: o, alpha: 0, duration: 400 }); });
+    // ── Tower — drawn precisely so beam origin is exact ───────────────
+    const tx   = W * 0.36;        // tower centre X
+    const base = H * 0.83;        // ground level
 
-    // Tower top = antenna tip position
-    const towerX = W * 0.5;
-    const towerY = H * (assets.bg ? 0.18 : 0.31); // top of antenna
+    // Compute key heights
+    const antennaTopY  = base - H * 0.52;  // antenna tip  ← beam fires from here
+    const antennaBaseY = base - H * 0.44;
+    const headTopY     = base - H * 0.42;
+    const headBotY     = base - H * 0.34;
+    const neckTopY     = base - H * 0.34;
+    const neckBotY     = base - H * 0.26;
+    const bodyTopY     = base - H * 0.26;
+    const bodyBotY     = base - H * 0.12;
+    const legBotY      = base;
 
-    sfx.charge();
+    const tw = this.add.graphics().setDepth(61).setAlpha(0);
 
-    // Charge-up glow at tower top
-    const glow = this.add.graphics().setDepth(65);
-    let ga = 0;
-    const gT = this.time.addEvent({ delay: 16, repeat: 38, callback: () => {
-      ga = Math.min(0.7, ga + 0.02); glow.clear();
-      glow.fillStyle(0x00ccff, ga * 0.4); glow.fillCircle(towerX, towerY, 6 + ga * 40);
-      glow.fillStyle(0x00ffff, ga); glow.fillCircle(towerX, towerY, 4 + ga * 10);
+    // Ground glow under tower
+    tw.fillStyle(0x00ff88, 0.04); tw.fillEllipse(tx, base, 140, 18);
+
+    // Legs (two angled struts)
+    tw.fillStyle(0x0e2218, 1);
+    tw.fillTriangle(tx - 10, bodyBotY, tx - 42, legBotY, tx - 28, legBotY);
+    tw.fillTriangle(tx + 10, bodyBotY, tx + 42, legBotY, tx + 28, legBotY);
+
+    // Body
+    tw.fillStyle(0x0c1c14, 1);
+    tw.fillRect(tx - 20, bodyTopY, 40, bodyBotY - bodyTopY);
+    // Body accent lines
+    tw.lineStyle(1, 0x00cc66, 0.25);
+    for (let y = bodyTopY + 8; y < bodyBotY; y += 14) tw.lineBetween(tx - 20, y, tx + 20, y);
+
+    // Neck
+    tw.fillStyle(0x0a1810, 1);
+    tw.fillRect(tx - 14, neckTopY, 28, neckBotY - neckTopY);
+
+    // Head (hexagonal platform)
+    tw.fillStyle(0x112a1a, 1);
+    tw.fillRect(tx - 28, headTopY, 56, headBotY - headTopY);
+    tw.fillStyle(0x0e2218, 1);
+    tw.fillRect(tx - 32, headTopY + 2, 64, 6); // top ledge
+    // Dish left
+    tw.lineStyle(2, 0x1a3a28, 1);
+    tw.strokeEllipse(tx - 38, headTopY + 10, 22, 16);
+    // Dish right
+    tw.strokeEllipse(tx + 38, headTopY + 10, 22, 16);
+
+    // Antenna
+    tw.fillStyle(0x1a3a2a, 1);
+    tw.fillRect(tx - 3, antennaTopY, 6, antennaBaseY - antennaTopY);
+
+    // Cyan accent lights
+    tw.fillStyle(0x00ffcc, 0.9);
+    tw.fillRect(tx - 25, headTopY + 8, 4, 3);
+    tw.fillRect(tx + 21, headTopY + 8, 4, 3);
+    tw.fillRect(tx - 22, bodyTopY + 6, 3, 3);
+    tw.fillRect(tx + 19, bodyTopY + 6, 3, 3);
+    // Blinking red warning light at antenna base
+    tw.fillStyle(0xff2200, 0.8);
+    tw.fillCircle(tx, antennaBaseY - 2, 3);
+
+    this.tweens.add({ targets: tw, alpha: 1, duration: 600 });
+
+    // Blink the warning light
+    const warnLight = this.add.graphics().setDepth(62);
+    let warnOn = true;
+    const warnT = this.time.addEvent({ delay: 400, loop: true, callback: () => {
+      warnOn = !warnOn; warnLight.clear();
+      if (warnOn) { warnLight.fillStyle(0xff2200, 0.9); warnLight.fillCircle(tx, antennaBaseY - 2, 3); }
     }});
 
-    this.time.delayedCall(650, () => {
-      glow.destroy(); this.time.removeEvent(gT);
+    // Exact beam origin = antenna tip
+    const towerX = tx;
+    const towerY = antennaTopY;
+
+    // ── PHASE 1 — CHARGE (1.4s) ───────────────────────────────────────
+    sfx.charge();
+
+    // Energy particles converging to tower tip
+    dot(this);
+    for (let i = 0; i < 16; i++) {
+      const angle  = (i / 16) * Math.PI * 2;
+      const radius = 60 + Math.random() * 50;
+      const obj    = { x: towerX + Math.cos(angle) * radius, y: towerY + Math.sin(angle) * radius };
+      const spark  = this.add.graphics().setDepth(67);
+      this.tweens.add({
+        targets: obj, x: towerX, y: towerY,
+        duration: 900 + Math.random() * 500, ease: 'Quad.In',
+        onUpdate: () => {
+          spark.clear();
+          spark.fillStyle(0x00ffff, 0.85);
+          spark.fillCircle(obj.x, obj.y, 2.5);
+          spark.fillStyle(0x0088ff, 0.3);
+          spark.fillCircle(obj.x, obj.y, 5);
+        },
+        onComplete: () => spark.destroy(),
+      });
+    }
+
+    // Pulsing energy core at tower tip
+    const glowCore = this.add.graphics().setDepth(66);
+    let ga = 0;
+    const gT = this.time.addEvent({ delay: 16, repeat: 85, callback: () => {
+      ga = Math.min(1, ga + 0.012); glowCore.clear();
+      glowCore.fillStyle(0x0033ff, ga * 0.12); glowCore.fillCircle(towerX, towerY, 8 + ga * 55);
+      glowCore.fillStyle(0x0099ff, ga * 0.25); glowCore.fillCircle(towerX, towerY, 5 + ga * 28);
+      glowCore.fillStyle(0x00eeff, ga * 0.7);  glowCore.fillCircle(towerX, towerY, 3 + ga * 12);
+      glowCore.fillStyle(0xffffff, ga * 0.95); glowCore.fillCircle(towerX, towerY, 2 + ga * 5);
+    }});
+
+    // ── PHASE 2 — FIRE (after 1.4s) ──────────────────────────────────
+    this.time.delayedCall(1400, () => {
+      glowCore.destroy(); this.time.removeEvent(gT);
       sfx.fire();
-      this.cameras.main.flash(140, 0, 200, 255);
-      this.cameras.main.shake(350, 0.007);
+      this.cameras.main.flash(180, 255, 255, 255);
+      this.cameras.main.shake(500, 0.012);
 
-      // Straight beam: tower top → sector 7
-      const beam = this.add.graphics().setDepth(66);
-      const startX = towerX, startY = towerY;
+      const isElev = this.puzzle.angleType === 'elevation';
+      const endX   = W * 0.80;
+      const endY   = isElev ? H * 0.16 : H * 0.80;
 
-      // Sector 7 marker — up (elevation) or down (depression)
-      const isElevation = this.puzzle.angleType === 'elevation';
-      const endX = W * 0.82;
-      const endY = isElevation ? H * 0.18 : H * 0.78;
-
-      const s7 = this.add.graphics().setDepth(64);
-      s7.fillStyle(0x00ff88, 0.2); s7.fillCircle(endX, endY, 22);
-      s7.lineStyle(2, 0x00ff88, 0.6); s7.strokeCircle(endX, endY, 22);
-      this.add.text(endX, endY + (isElevation ? -34 : 34), 'SECTOR 7', {
-        fontFamily: FONT.body, fontSize: '9px', color: '#00ff88',
+      // Sector 7 marker
+      const s7g = this.add.graphics().setDepth(64);
+      s7g.fillStyle(0x00ff88, 0.12); s7g.fillCircle(endX, endY, 28);
+      s7g.lineStyle(1.5, 0x00ff88, 0.45); s7g.strokeCircle(endX, endY, 28);
+      s7g.lineStyle(1, 0x00ff88, 0.2); s7g.strokeCircle(endX, endY, 42);
+      this.add.text(endX, endY + (isElev ? -42 : 42), 'SECTOR 7', {
+        fontFamily: FONT.body, fontSize: '10px', color: '#00ff88', letterSpacing: 2,
       }).setOrigin(0.5).setDepth(65);
 
-      // straight beam — no bounce
+      // ── Beam graphics (5 layers for real glow) ──
+      const bOuter  = this.add.graphics().setDepth(67); // widest soft glow
+      const bMid    = this.add.graphics().setDepth(68); // mid glow
+      const bInner  = this.add.graphics().setDepth(69); // tight glow
+      const bCore   = this.add.graphics().setDepth(70); // white-hot core
+      const bHead   = this.add.graphics().setDepth(71); // leading orb
+
+      const sx = towerX, sy = towerY;
       let bp = 0;
-      const seg = (t) => [
-        startX + (endX - startX) * t,
-        startY + (endY - startY) * t,
-      ];
-      const beamT = this.time.addEvent({ delay: 14, repeat: 60, callback: () => {
-        bp = Math.min(1, bp + 0.038); beam.clear();
-        // glow trail
-        beam.lineStyle(8, 0x00aaff, 0.2);
-        beam.beginPath();
-        for (let t = 0; t <= bp; t += 0.02) { const [x, y] = seg(t); t === 0 ? beam.moveTo(x, y) : beam.lineTo(x, y); }
-        beam.strokePath();
-        // core beam
-        beam.lineStyle(2, 0x00ffff, 1);
-        beam.beginPath();
-        for (let t = 0; t <= bp; t += 0.02) { const [x, y] = seg(t); t === 0 ? beam.moveTo(x, y) : beam.lineTo(x, y); }
-        beam.strokePath();
-        // leading dot
-        const [hx, hy] = seg(bp);
-        beam.fillStyle(0xffffff, 1); beam.fillCircle(hx, hy, 4);
-        beam.fillStyle(0x00ffff, 0.4); beam.fillCircle(hx, hy, 10);
+      let pulse = 0;
+
+      const beamT = this.time.addEvent({ delay: 13, repeat: 70, callback: () => {
+        bp    = Math.min(1, bp + 0.032);
+        pulse = (pulse + 0.25) % (Math.PI * 2);
+        const pw = 1 + Math.sin(pulse) * 0.3; // subtle width pulse
+
+        const cx = sx + (endX - sx) * bp;
+        const cy = sy + (endY - sy) * bp;
+
+        // Layer 1 — wide outer glow (additive feel)
+        bOuter.clear();
+        bOuter.lineStyle(28 * pw, 0x0011ff, 0.06);
+        bOuter.lineBetween(sx, sy, cx, cy);
+        bOuter.lineStyle(20 * pw, 0x0044ff, 0.09);
+        bOuter.lineBetween(sx, sy, cx, cy);
+
+        // Layer 2 — mid glow
+        bMid.clear();
+        bMid.lineStyle(12 * pw, 0x0088ff, 0.22);
+        bMid.lineBetween(sx, sy, cx, cy);
+        bMid.lineStyle(8  * pw, 0x00ccff, 0.38);
+        bMid.lineBetween(sx, sy, cx, cy);
+
+        // Layer 3 — inner bright
+        bInner.clear();
+        bInner.lineStyle(4 * pw, 0x44eeff, 0.75);
+        bInner.lineBetween(sx, sy, cx, cy);
+
+        // Layer 4 — white-hot core
+        bCore.clear();
+        bCore.lineStyle(1.5, 0xffffff, 1.0);
+        bCore.lineBetween(sx, sy, cx, cy);
+
+        // Layer 5 — leading orb
+        bHead.clear();
+        bHead.fillStyle(0xffffff, 1);    bHead.fillCircle(cx, cy, 5);
+        bHead.fillStyle(0x00eeff, 0.7);  bHead.fillCircle(cx, cy, 11);
+        bHead.fillStyle(0x0055ff, 0.25); bHead.fillCircle(cx, cy, 20);
+
+        // Occasional side sparks
+        if (Math.random() < 0.25) {
+          const st = bp * 0.85;
+          const spx = sx + (endX - sx) * st + (Math.random() - 0.5) * 8;
+          const spy = sy + (endY - sy) * st + (Math.random() - 0.5) * 8;
+          const sp  = this.add.graphics().setDepth(72);
+          sp.fillStyle(0x00ffff, 0.9); sp.fillCircle(spx, spy, 2);
+          this.time.delayedCall(120, () => sp.destroy());
+        }
       }});
 
-      this.time.delayedCall(1100, () => {
+      // ── PHASE 3 — IMPACT (after beam travels) ─────────────────────
+      this.time.delayedCall(1000, () => {
         this.time.removeEvent(beamT);
-        burst(this, endX, endY, 0xffdd88, 40);
-        burst(this, endX, endY, 0x00ff88, 28);
-        this.cameras.main.flash(200, 0, 255, 120);
-        this.add.text(W / 2, H * 0.42, 'SIGNAL REACHED SECTOR 7', {
-          fontFamily: FONT.title, fontSize: `${Math.min(18, W * 0.038)}px`,
-          color: '#00ff88', letterSpacing: 3,
-        }).setOrigin(0.5).setDepth(68);
+        sfx.impact();
+        this.cameras.main.flash(250, 0, 255, 140);
+        this.cameras.main.shake(500, 0.014);
+
+        // Shockwave rings
+        shockwave(this, endX, endY, 0x00ff88, 73);
+        shockwave(this, endX, endY, 0x00eeff, 73);
+
+        // Multi-colour particle explosion
+        burst(this, endX, endY, 0x00ff88, 45, 74);
+        burst(this, endX, endY, 0xffffff, 22, 74);
+        burst(this, endX, endY, 0x00ccff, 30, 74);
+        this.time.delayedCall(150, () => burst(this, endX, endY, 0xffee44, 18, 74));
+
+        // Beam holds then fades
+        this.time.delayedCall(200, () => {
+          [bOuter, bMid, bInner, bCore, bHead].forEach(b =>
+            this.tweens.add({ targets: b, alpha: 0, duration: 700 }));
+        });
+
+        // ── PHASE 4 — VICTORY TEXT ─────────────────────────────────
+        this.time.delayedCall(400, () => {
+          // Dark overlay panel
+          const ovPanel = this.add.graphics().setDepth(75).setAlpha(0);
+          ovPanel.fillStyle(0x000000, 0.55); ovPanel.fillRect(0, H * 0.34, W, H * 0.22);
+          this.tweens.add({ targets: ovPanel, alpha: 1, duration: 300 });
+
+          const vt = this.add.text(W / 2, H * 0.42, 'SIGNAL REACHED', {
+            fontFamily: FONT.title, fontSize: `${Math.min(20, W * 0.042)}px`,
+            color: '#00ff88', letterSpacing: 4,
+            stroke: '#003322', strokeThickness: 4,
+          }).setOrigin(0.5).setDepth(76).setAlpha(0);
+
+          const vt2 = this.add.text(W / 2, H * 0.51, 'SECTOR 7', {
+            fontFamily: FONT.title, fontSize: `${Math.min(28, W * 0.058)}px`,
+            color: '#ffffff', letterSpacing: 8,
+            stroke: '#00aa44', strokeThickness: 3,
+          }).setOrigin(0.5).setDepth(76).setAlpha(0);
+
+          this.tweens.add({ targets: vt,  alpha: 1, duration: 400, delay: 0 });
+          this.tweens.add({ targets: vt2, alpha: 1, duration: 400, delay: 200,
+            onComplete: () => {
+              // Pulse the text
+              this.tweens.add({ targets: [vt, vt2], alpha: 0.7, duration: 600,
+                yoyo: true, repeat: 2 });
+            }
+          });
+        });
+
+        this.time.removeEvent(warnT); warnLight.destroy();
         this._complete();
-        this.time.delayedCall(1800, () => {
+
+        this.time.delayedCall(2400, () => {
           this.scene.start('VictoryScene', {
             score: { xp: this._score(), hintsUsed: this.hintsUsed, wrongAnswers: this._wrongList() },
             subject: this.profile.subject, difficulty: this.profile.difficulty, sessionId: this.sessionId,

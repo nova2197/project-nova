@@ -1506,13 +1506,19 @@ export class ProfileScene extends Phaser.Scene {
     scanLines(this, W, H);
     titleBar(this, W, 'COMMANDER PROFILE  ——  SELECT LOADOUT');
 
+    // Mobile-friendly font scale — minimum 13px so nothing is tiny on a phone
+    const labelFs  = Math.max(13, Math.min(15, W * 0.038));
+    const descFs   = Math.max(12, Math.min(13, W * 0.030));
+    const headerFs = Math.max(12, Math.min(13, W * 0.028));
+    const tinyFs   = Math.max(11, Math.min(12, W * 0.025));
+
     let curY = 46;
 
     // ── Subject panel
-    const subH = Math.min(H * 0.22, 130);
+    const subH = Math.min(H * 0.26, 150);
     drawPanel(this, pad, curY, W - pad * 2, subH, 3);
-    this.add.text(pad + 10, curY + 4, 'SUBJECT PROFILE', {
-      fontSize: '10px', fontFamily: 'Courier New', color: '#00aaff', letterSpacing: 2,
+    this.add.text(pad + 10, curY + 6, 'SUBJECT PROFILE', {
+      fontSize: `${headerFs}px`, fontFamily: 'Courier New', color: '#00aaff', letterSpacing: 2,
     }).setDepth(4);
 
     const subjects = [
@@ -1520,31 +1526,32 @@ export class ProfileScene extends Phaser.Scene {
       { key: 'physics', label: 'PHYSICS + E-MATH',  accent: 0xffaa00, desc: '+ Wave eq. · EM Spectrum' },
     ];
     subjects.forEach((s, i) => {
-      const bw = (W - pad * 4) / 2, bh = Math.min(54, subH * 0.55);
-      const bx = pad + i * (bw + pad * 2), by = curY + subH * 0.3;
+      const bw = (W - pad * 4) / 2;
+      const bh = Math.min(64, subH * 0.58);
+      const bx = pad + i * (bw + pad * 2), by = curY + subH * 0.28;
       const sel = s.key === this.selectedSubject;
       const g = this.add.graphics().setDepth(4);
       g.fillStyle(sel ? 0x002233 : 0x010810, 1);
-      g.lineStyle(1, s.accent, sel ? 0.9 : 0.3);
-      g.fillRoundedRect(bx, by, bw, bh, 3); g.strokeRoundedRect(bx, by, bw, bh, 3);
-      if (sel) { g.lineStyle(1, 0xff3333, 0.35); g.lineBetween(bx + 8, by + bh - 1, bx + bw - 8, by + bh - 1); }
-      this.add.text(bx + bw / 2, by + 14, s.label, {
-        fontSize: `${Math.min(10, W * 0.015)}px`, fontFamily: 'Courier New', color: sel ? '#ffffff' : '#445566', letterSpacing: 1,
+      g.lineStyle(2, s.accent, sel ? 1 : 0.3);
+      g.fillRoundedRect(bx, by, bw, bh, 4); g.strokeRoundedRect(bx, by, bw, bh, 4);
+      if (sel) { g.lineStyle(1, 0xff3333, 0.4); g.lineBetween(bx + 8, by + bh - 2, bx + bw - 8, by + bh - 2); }
+      this.add.text(bx + bw / 2, by + bh * 0.32, s.label, {
+        fontSize: `${labelFs}px`, fontFamily: 'Courier New', color: sel ? '#ffffff' : '#556677', letterSpacing: 1,
       }).setOrigin(0.5).setDepth(5);
-      this.add.text(bx + bw / 2, by + 30, s.desc, {
-        fontSize: `${Math.min(8, W * 0.012)}px`, fontFamily: 'Courier New', color: sel ? '#aaccdd' : '#334455', align: 'center', wordWrap: { width: bw - 10 },
+      this.add.text(bx + bw / 2, by + bh * 0.68, s.desc, {
+        fontSize: `${descFs}px`, fontFamily: 'Courier New', color: sel ? '#aaccdd' : '#334455', align: 'center',
       }).setOrigin(0.5).setDepth(5);
       g.setInteractive(new Phaser.Geom.Rectangle(bx, by, bw, bh), Phaser.Geom.Rectangle.Contains);
       g.on('pointerdown', () => { sfx.click(); this.scene.restart({ subject: s.key, diff: this.selectedDiff }); });
     });
 
-    curY += subH + 8;
+    curY += subH + 10;
 
     // ── Difficulty panel
-    const diffH = Math.min(H * 0.22, 130);
+    const diffH = Math.min(H * 0.26, 150);
     drawPanel(this, pad, curY, W - pad * 2, diffH, 3);
-    this.add.text(pad + 10, curY + 4, 'DIFFICULTY', {
-      fontSize: '10px', fontFamily: 'Courier New', color: '#00aaff', letterSpacing: 2,
+    this.add.text(pad + 10, curY + 6, 'DIFFICULTY', {
+      fontSize: `${headerFs}px`, fontFamily: 'Courier New', color: '#00aaff', letterSpacing: 2,
     }).setDepth(4);
 
     const diffs = [
@@ -1553,54 +1560,53 @@ export class ProfileScene extends Phaser.Scene {
       { key: 'G3', label: 'G3', sub: 'Challenge' },
     ];
     diffs.forEach((d, i) => {
-      const bw = (W - pad * 2 - 12) / 3, bh = Math.min(48, diffH * 0.5);
-      const bx = pad + i * (bw + 6), by = curY + diffH * 0.28;
+      const bw = (W - pad * 2 - 16) / 3;
+      const bh = Math.min(64, diffH * 0.58);
+      const bx = pad + i * (bw + 8), by = curY + diffH * 0.28;
       const sel = d.key === this.selectedDiff;
       const g = this.add.graphics().setDepth(4);
       g.fillStyle(sel ? 0x002233 : 0x010810, 1);
-      g.lineStyle(1, 0x00aaff, sel ? 0.9 : 0.3);
-      g.fillRoundedRect(bx, by, bw, bh, 3); g.strokeRoundedRect(bx, by, bw, bh, 3);
-      if (sel) { g.lineStyle(1, 0xff3333, 0.35); g.lineBetween(bx + 6, by + bh - 1, bx + bw - 6, by + bh - 1); }
-      this.add.text(bx + bw / 2, by + 13, d.label, {
-        fontSize: `${Math.min(15, W * 0.022)}px`, fontFamily: 'Georgia, serif', color: sel ? '#00ff88' : '#445566',
+      g.lineStyle(2, 0x00aaff, sel ? 1 : 0.3);
+      g.fillRoundedRect(bx, by, bw, bh, 4); g.strokeRoundedRect(bx, by, bw, bh, 4);
+      if (sel) { g.lineStyle(1, 0xff3333, 0.4); g.lineBetween(bx + 6, by + bh - 2, bx + bw - 6, by + bh - 2); }
+      this.add.text(bx + bw / 2, by + bh * 0.32, d.label, {
+        fontSize: `${Math.max(18, Math.min(22, W * 0.05))}px`, fontFamily: 'Georgia, serif',
+        color: sel ? '#00ff88' : '#445566',
       }).setOrigin(0.5).setDepth(5);
-      this.add.text(bx + bw / 2, by + 32, d.sub, {
-        fontSize: `${Math.min(8, W * 0.012)}px`, fontFamily: 'Courier New', color: sel ? '#aaccdd' : '#334455',
+      this.add.text(bx + bw / 2, by + bh * 0.72, d.sub, {
+        fontSize: `${descFs}px`, fontFamily: 'Courier New', color: sel ? '#aaccdd' : '#334455',
       }).setOrigin(0.5).setDepth(5);
       g.setInteractive(new Phaser.Geom.Rectangle(bx, by, bw, bh), Phaser.Geom.Rectangle.Contains);
       g.on('pointerdown', () => { sfx.click(); this.scene.restart({ subject: this.selectedSubject, diff: d.key }); });
     });
 
-    curY += diffH + 8;
+    curY += diffH + 10;
 
     // ── Question preview panel
     const previewLines = [
       ...DIFF_PREVIEW[this.selectedDiff],
       ...(this.selectedSubject === 'physics' ? PHYSICS_EXTRA : []),
     ];
-    const previewH = Math.min(H * 0.20, 22 + previewLines.length * 18 + 10);
+    const lineH = Math.max(20, tinyFs + 8);
+    const previewH = Math.min(H * 0.20, 28 + previewLines.length * lineH + 8);
     drawPanel(this, pad, curY, W - pad * 2, previewH, 3);
-    this.add.text(pad + 10, curY + 4, 'QUESTIONS IN THIS RUN', {
-      fontSize: '9px', fontFamily: 'Courier New', color: '#ff3333', letterSpacing: 2,
+    this.add.text(pad + 10, curY + 6, 'QUESTIONS IN THIS RUN', {
+      fontSize: `${tinyFs}px`, fontFamily: 'Courier New', color: '#ff3333', letterSpacing: 2,
     }).setDepth(4);
     previewLines.forEach((line, i) => {
       const isPhysics = line.startsWith('Q+');
-      this.add.text(pad + 14, curY + 22 + i * 18, line, {
-        fontSize: `${Math.min(10, W * 0.015)}px`, fontFamily: 'Courier New',
+      this.add.text(pad + 14, curY + 26 + i * lineH, line, {
+        fontSize: `${tinyFs}px`, fontFamily: 'Courier New',
         color: isPhysics ? '#ffaa00' : '#aaccdd',
       }).setDepth(4);
     });
 
-    curY += previewH + 8;
+    curY += previewH + 10;
 
-    // ── MOE tag + Launch button
-    this.add.text(W / 2, curY, 'Aligned to MOE Singapore O-Level syllabus', {
-      fontSize: '9px', fontFamily: 'Courier New', color: '#334455',
-    }).setOrigin(0.5).setDepth(4);
-
-    const btnW = Math.min(220, W * 0.6), btnH = 42;
-    makeBtn(this, W / 2 - btnW / 2, curY + 14, btnW, btnH, '[ LAUNCH MISSION ]', Math.min(13, W * 0.02), 4,
-      () => this._startMission());
+    // ── Launch button
+    const btnW = Math.min(260, W * 0.7), btnH = Math.max(48, H * 0.07);
+    makeBtn(this, W / 2 - btnW / 2, curY, btnW, btnH, '[ LAUNCH MISSION ]',
+      Math.max(14, Math.min(16, W * 0.036)), 4, () => this._startMission());
   }
 
   _startMission() {
